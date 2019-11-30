@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <title>登录</title>
+
+    <style>
+        .text {
+            width: 220px;
+            height: 40px;
+            outline: none;
+            display: inline-block;
+            border: 2px solid gray;
+            background: none;
+            font-size: 20px;
+            border-radius: 20px;
+
+        }
+
+        .username {
+            margin-top: 230px;
+            color: gray;
+        }
+
+        button {
+            margin: 10px;
+            color: chartreuse;
+        }
+
+        body {
+            background-size:cover;
+        }
+
+    </style>
+</head>
+<body>
+<form align="center" th:action="@{/loginChar}">
+    <div><font color="#b0e0e6" size="30">登录</font></div>
+    <div>
+        <input name="userName" class="text username" type="text" PLACEHOLDER="  用户名 ">
+    </div>
+    <div>
+
+    </div>
+    <div>
+        <button class="text" >登录</button>
+    </div>
+</form>
+
+</body>
+</html>

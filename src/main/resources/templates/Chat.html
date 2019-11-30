@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.springframework.org/schema/mvc">
+<head>
+    <meta charset="UTF-8">
+    <title>聊天</title>
+    <script th:src="@{/webjars/jquery/jquery.min.js}"></script>
+    <style>
+        div div {
+            background: blanchedalmond;
+            width: 90%;
+            border-radius: 5px;
+            margin-top: 10px;
+            margin-left: 5%;
+            line-height: 30px;
+            word-wrap: break-word;
+            word-break: break-all;
+            font-size: 15px;
+        }
+
+        textarea {
+            height: 70px;
+            width: 99%;
+            font-size: 15px;
+            float: left;
+        }
+
+        table {
+            margin-top: 50px;
+        }
+
+        button {
+            width: 25%;
+            height: 30px;
+            float: left;
+        }
+
+        b {
+            margin-top: 5px;
+            margin-left: 5px;
+            font-size: 10px;
+            color: dimgray;
+            background: lightgrey;
+        }
+
+        i {
+            font-style: normal;
+        }
+    </style>
+
+</head>
+<body>
+<div>欢迎您：<i th:text="${userName}" id="userName"/> ！</div>
+<table align="center" border="1 solid" width="80%">
+
+    <!--标题-->
+    <tr>
+        <td width="20%" align="center" height="50px">聊天对象</td>
+        <td width="60%" align="center">聊天内容</td>
+        <td width="20%" align="center">在线用户：<i id="onlineUser">0</i></td>
+    </tr>
+
+    <!--信息内容-->
+    <tr>
+        <!--聊天对象版块-->
+        <td rowspan="10" height="550px" valign="top">
+
+
+            <div style="overflow:auto;height: 600px" id="chatUsers">
+                <!--聊天对象-->
+
+            </div>
+
+            <!--聊天内容版块-->
+        <td valign="top" height="500px">
+
+            <!--聊天对象 信息-->
+            <b>正在与: <i id="receiver"></i> 聊天 </b>
+            <span id="time" style="margin-top: 5px;margin-left: 5px;font-size: 10px;color: dimgray;"></span>
+
+            <div style="overflow:auto;height: 500px" id="chatContent">
+                <!--聊天内容-->
+                <div>请选择聊天对象！！</div>
+            </div>
+
+        </td>
+
+        <!--在线用户版块-->
+        <td rowspan="10" valign="top">
+            <div style="overflow:auto;height: 600px" id="onlineUsers">
+                <!--在线用户-->
+            </div>
+        </td>
+    </tr>
+
+    <!--操作按钮-->
+    <tr>
+        <td height="100px" valign="top">
+            <!--发言框-->
+            <textarea valign="top" height="100px" placeholder="消息内容..."></textarea>
+            <!--操作按钮-->
+            <a th:href="@{/}">
+                <button style="background: red">退出</button>
+            </a>
+            <button style="background: darkgray" th:onclick="findChat()">聊天记录</button>
+            <button style="background: lawngreen" th:onclick="clearMsg()">清屏</button>
+            <button style="background: deepskyblue" th:onclick="sendMsgToServer()">发送</button>
+        </td>
+    </tr>
+</table>
+
+<script th:inline="javascript">
+
+    function getWebSocket() {
+
+        var webSocket = null;
+
+        //判断当前浏览器是否支持WebSocket
+        if ('WebSocket' in window) {
+            //创建实例
+            webSocket = new WebSocket("ws:/192.168.5.115:80/server/" + $('#userName').text());
+        } else {
+            alert('当前浏览器不支持WebSocket')
+        }
+
+        /**
+         * 当服务端打开链接时
+         */
+        webSocket.onopen = function (ev) {
+            console.log('用户：[' + $('#userName').text() + "]与WepSocketServer连接成功")
+        };
+
+        /**
+         * 当服务端发来消息时：广播消息 更新人数
+         */
+        webSocket.onmessage = function (ev) {
+
+            //获取服务端消息
+            var message = JSON.parse(ev.data) || {};
+            //获取聊天内容列表
+            var $chatContent = $('#chatContent');
+
+            //如果用户登陆 或 离线
+            if (message.state === "0" || message.state === "2") {
+
+                //更新在线人数
+                $('#onlineUser').text(message.onlineUsers.length);
+
+                //更新在线用户列表
+                var str = "";
+                for (var user of message.onlineUsers) {
+                    var u = "'" + user + "'";
+                    str += '<div onclick="addChat(' + u + ')" id="ol-' + user + '">' + user + '</div>';
+                }
+                $('#onlineUsers').html(str);
+            }
+
+            //展示用户的发言
+            if (message.state === "1") {
+                //消息发送者界面
+                if (message.sender === $('#userName').text()) {
+                    $chatContent.append(
+                        '<div><i style="font-size: 10px;color: aqua;">' + message.sender + '：' + message.time + '</i><br>' + message.message + '</div>'
+                    );
+                    newChat();
+                }
+
+                //消息接收者界面
+                if (message.receiver === $('#userName').text()) {
+                    if (message.sender === $('#receiver').text()) {
+                        //消息发送者是正在聊天的对象
+                        $chatContent.append(
+                            '<div><i style="font-size: 10px;color: aqua;">' + message.sender + '：' + message.time + '</i><br>' + message.message + '</div>'
+                        );
+                        newChat();
+                    } else {
+                        //消息发送者不是正在聊天的对象
+                        //在聊天列表中 置顶该用户 并显示为未读数
+                        divStick(message.sender);
+                        $('#re-' + message.sender + '')
+                    }
+                }
+            }
+
+            //用户点击聊天对象 或在线用户时 展示相应的聊天记录
+            if (message.state === "3") {
+                if (message.user === $('#userName').text()) {
+                    for (map of message.chatMaps) {
+                        $chatContent.append(
+                            '<div><i style="font-size: 10px;color: aqua;">' + map.sender + '：' + map.time + '</i><br>' + map.message + '</div>'
+                        );
+                        newChat();
+                    }
+                }
+            }
+        };
+
+        /**
+         * 关闭连接时
+         */
+        webSocket.onclose = function (ev) {
+            console.log('用户：[' + $('#userName').text() + ']与WepSocketServer断开连接')
+        };
+
+        /**
+         * 通信异常时
+         */
+        webSocket.onerror = function (ev) {
+            console.log('通信异常')
+        };
+
+        return webSocket;
+    }
+
+    var webSocket = getWebSocket();
+
+    /**
+     * 发送
+     */
+    function sendMsgToServer() {
+        var $message = $('textarea');
+        if ($('#receiver').text() === "") {
+            alert("请选择聊天对象！");
+            $message.val(null);
+        } else if ($message.val() === "") {
+            alert("不能发送空白信息！")
+        } else {
+            if ($message.val()) {
+                webSocket.send(JSON.stringify({
+                    state: "1",
+                    sender: $('#userName').text(),
+                    message: htmlEncode($message.val()),
+                    receiver: $('#receiver').text(),
+                    time: $('#time').text()
+                }));
+                $message.val(null);//发送完消息后，清空输入框receiver
+            }
+        }
+    }
+
+    /**
+     * 清屏
+     */
+    function clearMsg() {
+        $('textarea').val(null);
+        $("#chatContent").empty();
+    }
+
+
+    /**
+     * 聊天对象点击事件
+     *  @param user 该用户名
+     */
+    function getChat(user) {
+        //清屏
+        clearMsg();
+        //清除未读数
+        //将当前聊天对象 改为该用户
+        $('#receiver').text(user);
+        //置顶
+        divStick(user);
+        //获取聊天记录
+        findChat();
+    }
+
+    /**
+     * 在线用户点击事件
+     * @param user 该用户名
+     */
+    function addChat(user) {
+        if ($('#userName').text() === user) {
+            alert("请不要和自己聊天！！")
+        } else {
+            //清屏
+            clearMsg();
+
+            //将用户 改为当前聊天对象
+            $('#receiver').text(user);
+            //添加进聊天列表中 置顶
+            divStick(user);
+
+            //获取聊天记录
+            findChat();
+        }
+    }
+
+    /**
+     * 查找聊天记录
+     */
+    function findChat() {
+        clearMsg();
+        webSocket.send(JSON.stringify({state: "3", sender: $('#userName').text(), receiver: $('#receiver').text()}))
+    }
+
+    /**
+     * 聊天对象 置顶
+     * @param user 该用户名
+     */
+
+    function divStick(user) {
+        var str = "'" + user + "'";
+        console.log(examineUser(user));
+        if (examineUser(user)) {
+            //有就删除该标签
+            $('#re-' + user + '').remove();
+        }
+        //在聊天对象 添加 该用户
+        $('#chatUsers').prepend(
+            '<div onclick="getChat(' + str + ')" id="re-' + user + '">' + user + '</div>'
+        );
+    }
+
+    /**
+     * 判断该用户是否在 聊天对象列表中
+     * @param user 该用户名id 属性
+     */
+    function examineUser(user) {
+        //获取聊天对象列表
+        var $divs = $('#chatUsers').children('div').toArray();
+        var str = "";
+        $divs.forEach(function (value, index) {
+            str += $(value).text() + ",";
+        });
+        if (str.indexOf(user) === -1) {
+            return false;
+        } else {
+            return true;
+        }
+
+
+    }
+
+    /**
+     * 让聊天内容显示最新的消息
+     */
+    function newChat() {
+        var chatContent = document.getElementById('chatContent')
+        chatContent.scrollTop = chatContent.scrollHeight;
+    }
+
+    /**
+     * 实时显示时间
+     */
+    setInterval(getCurDate, 1000);
+
+    function getCurDate() {
+        var date1 = new Date;
+        var year = date1.getFullYear();
+        var month = date1.getMonth();
+        var day = date1.getDate();
+        var hh = date1.getHours();
+        var mm = date1.getMinutes();
+        var ss = date1.getSeconds();
+        document.getElementById("time").innerHTML = year + "-" + (month + 1) + "-" + day + "  " + hh + "：" + mm + "：" + ss;
+    }
+
+    /**
+     * 用enter 发送信息
+     */
+    document.onkeydown = function (ev) {
+        var e = ev || window.event || arguments.callee.caller.arguments[0];
+        if (e.keyCode === 13) {
+            sendMsgToServer();
+            e.returnValue = false;
+            return false;
+        }
+    };
+
+    //转义  元素的innerHTML内容即为转义后的字符  防止js注入
+    function htmlEncode(str) {
+        var ele = document.createElement('span');
+        ele.appendChild(document.createTextNode(str));
+        return ele.innerHTML;
+    }
+
+    //解析
+    function htmlDecode(str) {
+        var ele = document.createElement('span');
+        ele.innerHTML = str;
+        return ele.textContent;
+    }
+
+</script>
+</body>
+</html>
